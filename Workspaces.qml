@@ -143,6 +143,51 @@ BarWidget {
     bar.shell.updateEntryInline(moduleName, next)
     return true
   }
+  function rememberedDisplayKey(entry) {
+    if (!entry) return ""
+    return JSON.stringify([entry.connector || "", entry.make || "", entry.model || "", entry.serial || ""])
+  }
+  function rememberedDisplays() {
+    return setting("displays", []).slice()
+  }
+  function rememberedDisplay(key) {
+    var entries = setting("displays", [])
+    for (var i = 0; i < entries.length; ++i)
+      if (rememberedDisplayKey(entries[i]) === key) return entries[i]
+    return null
+  }
+  function connectedConnectorFor(entry) {
+    if (!entry) return ""
+    var key = rememberedDisplayKey(entry), monitors = orderedMonitors()
+    for (var i = 0; i < monitors.length; ++i)
+      if (rememberedDisplayKey(displaySettings(monitors[i])) === key) return monitors[i].name
+    return ""
+  }
+  function rememberedDisplayOptions() {
+    return rememberedDisplays().map(function(entry) {
+      var connector = connectedConnectorFor(entry)
+      var name = entry.name || entry.connector || "Unnamed display"
+      return {
+        value: rememberedDisplayKey(entry),
+        label: (entry.icon || "\uf108") + "  " + name + " · " + (entry.connector || "no connector")
+          + " · " + (connector ? "Connected" : "Disconnected")
+      }
+    })
+  }
+  function updateRememberedDisplay(key, name, icon) {
+    name = String(name).trim()
+    if (!name || !icon) return false
+    var entries = setting("displays", []).slice()
+    var index = entries.findIndex(function(entry) { return rememberedDisplayKey(entry) === key })
+    if (index < 0) return false
+    entries[index] = Object.assign({}, entries[index], { name: name, icon: icon })
+    return saveDisplays(entries)
+  }
+  function forgetRememberedDisplay(key) {
+    var entries = setting("displays", [])
+    var kept = entries.filter(function(entry) { return rememberedDisplayKey(entry) !== key })
+    return kept.length !== entries.length && saveDisplays(kept)
+  }
   function displayEntry(monitor) {
     var identity = monitor.lastIpcObject || {}, entry = Object.assign({}, displaySettings(monitor), { connector: monitor.name })
     ;["make", "model", "serial"].forEach(function(key) { if (typeof identity[key] === "string") entry[key] = identity[key] })
