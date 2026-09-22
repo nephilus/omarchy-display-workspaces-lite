@@ -252,6 +252,13 @@ BarWidget {
   function workspacesFor(monitor) {
     return monitor && workspaceCatalog[monitor.name] ? workspaceCatalog[monitor.name] : []
   }
+  function workspaceHasWindows(workspace) {
+    if (!workspace) return false
+    if (workspace.toplevels && workspace.toplevels.values)
+      return workspace.toplevels.values.length > 0
+    var state = workspace.lastIpcObject
+    return state && typeof state.windows === "number" && state.windows > 0
+  }
   function focusWorkspace(id) {
     if (typeof id !== "number" || id <= 0) return
     var workspace = workspaceById(id)
@@ -317,7 +324,7 @@ BarWidget {
               text: shown ? "[" + modelData + "]" : String(modelData)
               tooltipText: (group.display.name || group.connector) + " · Workspace " + modelData + (focused ? " · Keyboard focus" : shown ? " · Visible" : "")
               active: focused
-              dimmed: !shown
+              dimmed: !shown && !root.workspaceHasWindows(workspace)
               horizontalMargin: 4; fixedHeight: root.barSize
               onPressed: function(button) { if (button === Qt.LeftButton) root.focusWorkspace(modelData) }
               Rectangle { anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; width: parent.width - Style.space(8); height: Style.space(2); color: parent.activeColor; visible: parent.focused }
