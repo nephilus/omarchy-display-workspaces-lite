@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "display.workspaces.lite",
+  "name": "Omarchy Display Workspaces Lite",
+  "version": "1.0.0",
+  "author": "nephilus (based on Omarchy)",
+  "description": "Named per-display workspace groups for HyprMonCfg-managed desktops",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Workspaces.qml"
+  },
+  "barWidget": {
+    "displayName": "Display Workspaces Lite",
+    "description": "Groups live and HyprMonCfg-declared workspaces by display. Tracks cursor display, visible workspace, and keyboard focus. Right-click to name displays, choose icons, and arrange display-group order. It never changes monitor geometry, workspace rules, profiles, or output state.",
+    "category": "Compositor",
+    "allowMultiple": false
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.workspaces"
+  }
+}
