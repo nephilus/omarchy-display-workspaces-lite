@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "display.workspaces.lite",
   "name": "Omarchy Display Workspaces Lite",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "nephilus (based on Omarchy)",
   "description": "Named per-display workspace groups for the Omarchy menubar",
   "kinds": [

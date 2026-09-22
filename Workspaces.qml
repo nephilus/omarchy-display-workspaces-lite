@@ -208,8 +208,18 @@ BarWidget {
     return monitor && workspaceCatalog[monitor.name] ? workspaceCatalog[monitor.name] : []
   }
   function focusWorkspace(id) {
-    if (bar && typeof id === "number" && id > 0) bar.run("hyprctl dispatch workspace " + id)
+    if (typeof id !== "number" || id <= 0) return
+    var workspace = workspaceById(id)
+    if (workspace) {
+      workspace.activate()
+      return
+    }
+    if (!workspaceCommand.running) {
+      workspaceCommand.command = ["hyprctl", "dispatch", "workspace", String(id)]
+      workspaceCommand.running = true
+    }
   }
+  Process { id: workspaceCommand }
 
   implicitWidth: groups.implicitWidth
   implicitHeight: groups.implicitHeight
@@ -262,7 +272,7 @@ BarWidget {
               text: shown ? "[" + modelData + "]" : String(modelData)
               tooltipText: (group.display.name || group.connector) + " · Workspace " + modelData + (focused ? " · Keyboard focus" : shown ? " · Visible" : "")
               active: focused
-              dimmed: !shown && (!workspace || workspace.toplevels.values.length === 0)
+              dimmed: !shown
               horizontalMargin: 4; fixedHeight: root.barSize
               onPressed: function(button) { if (button === Qt.LeftButton) root.focusWorkspace(modelData) }
               Rectangle { anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; width: parent.width - Style.space(8); height: Style.space(2); color: parent.activeColor; visible: parent.focused }
