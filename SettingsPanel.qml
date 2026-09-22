@@ -50,7 +50,7 @@ Panel {
         }
         Text {
           width: parent.width
-          text: "Names, icons, and menubar order save immediately. HyprMonCfg owns monitor layout and workspace rules."
+          text: "Display names, icons, and menubar order are remembered for each connector. A unique hardware identity keeps them matched if the connector changes."
           color: Color.foreground
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
