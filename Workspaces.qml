@@ -10,6 +10,7 @@ BarWidget {
   moduleName: "display.workspaces.lite"
   property var displayRanks: ({})
   property var declaredWorkspaces: ({})
+  readonly property var workspaceCatalog: cursorTracker ? cursorTracker.declaredWorkspaces : declaredWorkspaces
   property point cursorPosition: Qt.point(0, 0)
   property bool cursorKnown: false
   readonly property bool cursorQueryRunning: cursorQuery.running
@@ -204,7 +205,7 @@ BarWidget {
     return Hyprland.workspaces.values.find(function(workspace) { return workspace && workspace.id === id }) || null
   }
   function workspacesFor(monitor) {
-    return monitor && declaredWorkspaces[monitor.name] ? declaredWorkspaces[monitor.name] : []
+    return monitor && workspaceCatalog[monitor.name] ? workspaceCatalog[monitor.name] : []
   }
   function focusWorkspace(id) {
     if (bar && typeof id === "number" && id > 0) bar.run("hyprctl dispatch workspace " + id)
