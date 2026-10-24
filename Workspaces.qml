@@ -270,11 +270,14 @@ BarWidget {
     return { name: monitor.name, icon: monitor.name.indexOf("eDP") === 0 ? "\uf109" : "\uf108" }
   }
   function orderedMonitors() {
+    // Snapshot the ranks: a plugin rescan can destroy the instance holding them
+    // while delegates are still re-binding.
+    var ranks = displayRanks || {}
     return Hyprland.monitors.values.filter(function(m) {
       return m && typeof m.name === "string" && m.name !== "" && isPresented(m.lastIpcObject)
     }).sort(function(a, b) {
-      var ar = displayRanks[a.name] === undefined ? Infinity : displayRanks[a.name]
-      var br = displayRanks[b.name] === undefined ? Infinity : displayRanks[b.name]
+      var ar = ranks[a.name] === undefined ? Infinity : ranks[a.name]
+      var br = ranks[b.name] === undefined ? Infinity : ranks[b.name]
       if (ar !== br) return ar - br
       if (a.x !== b.x) return a.x - b.x
       return a.name.localeCompare(b.name)
@@ -284,7 +287,11 @@ BarWidget {
     return Hyprland.workspaces.values.find(function(workspace) { return workspace && workspace.id === id }) || null
   }
   function workspacesFor(monitor) {
-    return monitor && workspaceCatalog[monitor.name] ? workspaceCatalog[monitor.name] : []
+    if (!monitor) return []
+    // workspaceCatalog goes undefined while a previous instance of this widget
+    // is being torn down during a plugin rescan.
+    var catalog = workspaceCatalog
+    return catalog && catalog[monitor.name] ? catalog[monitor.name] : []
   }
   function workspaceHasWindows(workspace) {
     if (!workspace) return false
