@@ -21,6 +21,15 @@ BarWidget {
   readonly property string cursorDisplayName: cursorKnown ? displayAt(cursorPosition.x, cursorPosition.y) : ""
 
   function finiteNumber(value) { return typeof value === "number" && isFinite(value) }
+
+  // The catalog script ships next to this file. Qt.resolvedUrl hands back a
+  // file:// URL, so decode it into a real path: an install directory may hold
+  // spaces or other characters the URL encoder escaped.
+  readonly property string catalogScript: {
+    var url = Qt.resolvedUrl("workspace_catalog.py").toString()
+    return url.indexOf("file://") === 0 ? decodeURIComponent(url.slice(7)) : url
+  }
+
   function scheduleRefresh() {
     if (cursorTracker !== root) return
     refreshTimer.restart()
@@ -29,10 +38,7 @@ BarWidget {
     if (cursorTracker !== root) return
     Hyprland.refreshMonitors()
     Hyprland.refreshWorkspaces()
-    if (!catalogQuery.running) {
-      catalogQuery.command = ["python3", Qt.resolvedUrl("workspace_catalog.py").toString().replace("file://", "")]
-      catalogQuery.running = true
-    }
+    if (!catalogQuery.running) catalogQuery.running = true
   }
 
   onCursorTrackerChanged: {
@@ -45,38 +51,68 @@ BarWidget {
   onSettingsChanged: refreshDisplayOrder()
 
   Timer { id: refreshTimer; interval: 100; onTriggered: root.refreshModels() }
+
+  // Quickshell already reads Hyprland's event socket and relays every event as
+  // rawEvent, so this widget listens there only. Window-level events are
+  // ignored on purpose: they would re-query the catalog constantly.
+  function respondsToEvent(name) {
+    return name.indexOf("workspace") === 0 || name.indexOf("focusedmon") === 0
+      || name.indexOf("moveworkspace") === 0 || name.indexOf("monitor") === 0
+      || name === "configreloaded"
+  }
   Connections {
     target: Hyprland
     enabled: root.cursorTracker === root
-    function onRawEvent(event) {
-      if (event.name.indexOf("workspace") === 0 || event.name.indexOf("focusedmon") === 0
-          || event.name.indexOf("moveworkspace") === 0 || event.name.indexOf("monitor") === 0
-          || event.name === "configreloaded") root.scheduleRefresh()
-    }
-  }
-  HyprlandEventStream {
-    active: root.cursorTracker === root
-    path: Hyprland.eventSocketPath
-    onOpened: root.scheduleRefresh()
-    onEventReceived: function(name) {
-      if (name.indexOf("workspace") === 0 || name.indexOf("focusedmon") === 0
-          || name.indexOf("moveworkspace") === 0 || name.indexOf("monitor") === 0
-          || name === "configreloaded") root.scheduleRefresh()
-    }
+    function onRawEvent(event) { if (root.respondsToEvent(event.name)) root.scheduleRefresh() }
   }
 
   Process {
     id: catalogQuery
+    command: ["python3", root.catalogScript]
     stdout: StdioCollector {
-      id: catalogOutput
       waitForEnd: true
       onStreamFinished: {
-        try {
-          var result = JSON.parse(text)
-          if (result && result.ok && result.workspaces) root.declaredWorkspaces = result.workspaces
-        } catch (error) {}
+        var catalog = root.parseCatalog(text)
+        // Bad or truncated output keeps the last good model instead of blanking
+        // the bar.
+        if (catalog) root.declaredWorkspaces = catalog
       }
     }
+  }
+
+  // Only a positive-id list per named monitor is accepted, so nothing the
+  // catalog prints can reach the delegates unchecked.
+  function parseCatalog(text) {
+    var result
+    try { result = JSON.parse(text) } catch (error) { return null }
+    if (!result || result.ok !== true) return null
+    if (!result.workspaces || typeof result.workspaces !== "object" || Array.isArray(result.workspaces)) return null
+    var catalog = {}
+    var names = Object.keys(result.workspaces)
+    for (var i = 0; i < names.length; ++i) {
+      var ids = result.workspaces[names[i]]
+      if (!Array.isArray(ids) || names[i] === "__proto__") continue
+      var seen = {}
+      var accepted = []
+      for (var j = 0; j < ids.length; ++j) {
+        var id = ids[j]
+        if (!Number.isInteger(id) || id <= 0 || seen[id]) continue
+        seen[id] = true
+        accepted.push(id)
+      }
+      catalog[names[i]] = accepted.sort(function(left, right) { return left - right })
+    }
+    return catalog
+  }
+
+  // A non-mirrored monitor arrives as mirrorOf "none" from Hyprland and may be
+  // null elsewhere; only a connector name means the output mirrors another one.
+  function isMirrored(state) {
+    var mirror = state.mirrorOf
+    return mirror !== undefined && mirror !== null && mirror !== "" && mirror !== "none"
+  }
+  function isPresented(state) {
+    return !!state && !state.disabled && state.dpmsStatus !== false && !isMirrored(state)
   }
 
   function displayAt(x, y) {
@@ -84,7 +120,7 @@ BarWidget {
     var monitors = Hyprland.monitors.values
     for (var i = 0; i < monitors.length; ++i) {
       var monitor = monitors[i], state = monitor && monitor.lastIpcObject
-      if (!state || state.disabled || state.dpmsStatus === false || state.mirrorOf) continue
+      if (!isPresented(state)) continue
       if (!finiteNumber(state.width) || !finiteNumber(state.height) || !finiteNumber(state.scale)
           || state.width < 1 || state.height < 1 || state.scale <= 0
           || !finiteNumber(state.x) || !finiteNumber(state.y) || !finiteNumber(state.transform)) continue
@@ -97,7 +133,7 @@ BarWidget {
   }
   function pollCursor() {
     if (cursorTracker !== root || cursorQuery.running) return
-    var widgets = bar.moduleWidgets(moduleName)
+    var widgets = bar && typeof bar.moduleWidgets === "function" ? bar.moduleWidgets(moduleName) : []
     for (var i = 0; i < widgets.length; ++i)
       if (widgets[i] !== root && widgets[i].cursorQueryRunning) return
     cursorQuery.running = true
@@ -235,9 +271,7 @@ BarWidget {
   }
   function orderedMonitors() {
     return Hyprland.monitors.values.filter(function(m) {
-      var state = m && m.lastIpcObject
-      return m && typeof m.name === "string" && m.name !== "" && state && !state.disabled
-        && (state.mirrorOf === undefined || state.mirrorOf === null || state.mirrorOf === "" || state.mirrorOf === "none")
+      return m && typeof m.name === "string" && m.name !== "" && isPresented(m.lastIpcObject)
     }).sort(function(a, b) {
       var ar = displayRanks[a.name] === undefined ? Infinity : displayRanks[a.name]
       var br = displayRanks[b.name] === undefined ? Infinity : displayRanks[b.name]
@@ -259,19 +293,50 @@ BarWidget {
     var state = workspace.lastIpcObject
     return state && typeof state.windows === "number" && state.windows > 0
   }
+
+  // Opening a declared-but-uncreated workspace needs a dispatcher call, and the
+  // syntax depends on how the compositor is configured. A Lua config (Omarchy's
+  // default) evaluates /dispatch as Lua and rejects a bare `workspace 7`; it
+  // wants the same hl.dsp.focus call the stock Omarchy widget issues. A classic
+  // .conf config wants the opposite. usingLua picks the likely form and the exit
+  // status falls back to the other one, because a rejected dispatch exits
+  // non-zero and is silent otherwise. usingLua is false until the Hyprland
+  // object settles, so the fallback is what makes the first click reliable.
+  property int pendingWorkspaceId: 0
+  property bool workspaceRetried: false
+  function workspaceDispatchRequest(id, luaSyntax) {
+    return luaSyntax ? "hl.dsp.focus({ workspace = \"" + id + "\" })" : "workspace " + id
+  }
   function focusWorkspace(id) {
-    if (typeof id !== "number" || id <= 0) return
+    if (!Number.isInteger(id) || id <= 0 || id > 2147483647) return
     var workspace = workspaceById(id)
     if (workspace) {
       workspace.activate()
       return
     }
-    if (!workspaceCommand.running) {
-      workspaceCommand.command = ["hyprctl", "dispatch", "workspace", String(id)]
+    if (workspaceCommand.running) return
+    pendingWorkspaceId = id
+    workspaceRetried = false
+    workspaceCommand.command = ["hyprctl", "dispatch",
+      workspaceDispatchRequest(id, Hyprland.usingLua === true)]
+    workspaceCommand.running = true
+  }
+
+  Process {
+    id: workspaceCommand
+    onExited: function(code, status) {
+      var retried = root.workspaceRetried
+      var id = root.pendingWorkspaceId
+      root.pendingWorkspaceId = 0
+      root.workspaceRetried = false
+      if (code === 0 && status === 0 || retried || id <= 0) return
+      root.pendingWorkspaceId = id
+      root.workspaceRetried = true
+      workspaceCommand.command = ["hyprctl", "dispatch",
+        root.workspaceDispatchRequest(id, !(Hyprland.usingLua === true))]
       workspaceCommand.running = true
     }
   }
-  Process { id: workspaceCommand }
 
   implicitWidth: groups.implicitWidth
   implicitHeight: groups.implicitHeight
