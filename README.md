@@ -51,6 +51,14 @@ omarchy plugin disable omarchy.workspaces
 
 Plugin IDs and presentation settings are separate, so Lite does not migrate names, icons, or order from `display.workspaces`.
 
+`omarchy plugin update` rescans plugins but Quickshell rebuilds them from its cached component, so an updated **code** file needs one more step:
+
+```bash
+omarchy restart shell
+```
+
+Without it the bar keeps running the previous version and looks like a failed update.
+
 ## Requirements
 
 Omarchy's native Quickshell plugin system, Hyprland with `hyprctl`, and Python 3's standard library. HyprMonCfg is recommended but not required — ordinary exact Hyprland workspace rules work too. Nothing is installed: no daemon, systemd unit, dependency package, profile store, or background service, and no third-party code to patch.
