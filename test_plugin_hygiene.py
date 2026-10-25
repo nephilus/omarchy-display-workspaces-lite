@@ -115,6 +115,8 @@ class SourceContractTests(unittest.TestCase):
             self.assertFalse(target.startswith(("http://", "https://", "/")),
                              f"README should embed docs images locally, not {target!r}")
             self.assertTrue(os.path.exists(os.path.join(ROOT, target)), f"missing {target}")
+        for name in self.images:
+            self.assertIn(name, referenced, f"{name} is committed but no README embeds it")
 
     def test_manifest_matches_readme_and_points_at_existing_files(self):
         manifest = json.loads(read("manifest.json"))
