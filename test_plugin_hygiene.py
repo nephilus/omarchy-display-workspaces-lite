@@ -29,6 +29,8 @@ PRIVATE_PATTERNS = (
     ("compositor instance signature variable", re.compile(r"HYPRLAND_INSTANCE_SIGNATURE")),
     ("32-hex compositor instance signature", re.compile(r"\b[0-9a-f]{32}\b")),
 )
+IMAGE_SUFFIXES = (".png", ".gif", ".jpg", ".jpeg", ".webp", ".ico")
+MARKDOWN_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 DANGEROUS_PATTERNS = (
     ("shell execution", re.compile(r"\b(?:bash|sh)\s+-c\b")),
     ("shell quoting helper", re.compile(r"shellQuote")),
@@ -57,7 +59,13 @@ def read(name):
 
 class SourceContractTests(unittest.TestCase):
     def setUp(self):
-        self.sources = {name: read(name) for name in tracked_files()}
+        self.sources = {}
+        self.images = []
+        for name in tracked_files():
+            if name.lower().endswith(IMAGE_SUFFIXES):
+                self.images.append(name)
+                continue
+            self.sources[name] = read(name)
         self.code = {name: text for name, text in self.sources.items()
                      if name.endswith((".qml", ".py")) and not name.startswith("test_")}
 
@@ -95,6 +103,18 @@ class SourceContractTests(unittest.TestCase):
             for label, pattern in PRIVATE_PATTERNS:
                 match = pattern.search(text)
                 self.assertIsNone(match, f"{name} contains {label}: {match and match.group(0)!r}")
+
+    def test_documentation_images_live_in_docs_and_resolve(self):
+        for name in self.images:
+            self.assertTrue(name.startswith("docs/"), f"{name} should live under docs/")
+            self.assertGreater(os.path.getsize(os.path.join(ROOT, name)), 1024,
+                               f"{name} looks truncated")
+        referenced = MARKDOWN_IMAGE.findall(self.sources["README.md"])
+        self.assertTrue(referenced, "README lost its preview image")
+        for target in referenced:
+            self.assertFalse(target.startswith(("http://", "https://", "/")),
+                             f"README should embed docs images locally, not {target!r}")
+            self.assertTrue(os.path.exists(os.path.join(ROOT, target)), f"missing {target}")
 
     def test_manifest_matches_readme_and_points_at_existing_files(self):
         manifest = json.loads(read("manifest.json"))
